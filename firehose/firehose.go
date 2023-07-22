@@ -1,0 +1,108 @@
+package firehose
+
+import (
+	"bytes"
+	"context"
+	"fmt"
+	"net/http"
+	"strings"
+	"time"
+
+	"github.com/gorilla/websocket"
+	"github.com/ipfs/go-cid"
+	"github.com/rs/zerolog"
+
+	comatproto "github.com/bluesky-social/indigo/api/atproto"
+	"github.com/bluesky-social/indigo/events"
+	lexutil "github.com/bluesky-social/indigo/lex/util"
+	"github.com/bluesky-social/indigo/repo"
+	cbg "github.com/whyrusleeping/cbor-gen"
+)
+
+type Firehose struct {
+	Hooks []Hook
+}
+
+type Predicate func(ctx context.Context, commit *comatproto.SyncSubscribeRepos_Commit, op *comatproto.SyncSubscribeRepos_RepoOp, record cbg.CBORMarshaler) bool
+
+type Hook struct {
+	Predicate Predicate
+	Action    func(ctx context.Context, commit *comatproto.SyncSubscribeRepos_Commit, op *comatproto.SyncSubscribeRepos_RepoOp, record cbg.CBORMarshaler)
+}
+
+func New() *Firehose {
+	return &Firehose{}
+}
+
+func (f *Firehose) Run(ctx context.Context) error {
+
+	log := zerolog.Ctx(ctx).With().Str("module", "firehose").Logger()
+	ctx = log.WithContext(ctx)
+
+	for {
+		conn, _, err := websocket.DefaultDialer.Dial("wss://bsky.social/xrpc/com.atproto.sync.subscribeRepos", http.Header{})
+		if err != nil {
+			log.Error().Err(err).Msgf("websocket dial error")
+			time.Sleep(5 * time.Second)
+			continue
+		}
+
+		callbacks := &events.RepoStreamCallbacks{
+			RepoCommit: func(e *comatproto.SyncSubscribeRepos_Commit) error {
+				log := log.With().
+					Int64("seq", e.Seq).
+					Bool("rebase", e.Rebase).
+					Bool("tooBig", e.TooBig).
+					Str("commit_time", e.Time).
+					Str("repo", e.Repo).
+					Str("commit", e.Commit.String()).
+					Logger()
+				repo_, err := repo.ReadRepoFromCar(ctx, bytes.NewReader(e.Blocks))
+				if err != nil {
+					return fmt.Errorf("ReadRepoFromCar: %w", err)
+				}
+				for _, op := range e.Ops {
+					log.Trace().Interface("op", op).Msg("Op")
+					collection := strings.Split(op.Path, "/")[0]
+					rcid, rec, err := repo_.GetRecord(ctx, op.Path)
+					if err != nil {
+						log.Trace().Err(err).Msgf("GetRecord(%q)", op.Path)
+
+						log.Trace().Msgf("Signed commit: %+v", repo_.SignedCommit())
+						repo_.ForEach(ctx, collection, func(k string, v cid.Cid) error {
+							log.Trace().Msgf("Key: %q Cid: %s", k, v)
+							return nil
+						})
+
+						continue
+					}
+					if lexutil.LexLink(rcid) != *op.Cid {
+						log.Info().Err(fmt.Errorf("mismatch in record op and cid: %s != %s", rcid, *op.Cid))
+					}
+
+					for _, hook := range f.Hooks {
+						if hook.Action == nil {
+							continue
+						}
+						if hook.Predicate == nil || hook.Predicate(ctx, e, op, rec) {
+							go hook.Action(ctx, e, op, rec)
+						}
+					}
+				}
+				return nil
+			},
+		}
+
+		if err := events.HandleRepoStream(ctx, conn, &events.SequentialScheduler{Do: callbacks.EventHandler}); err != nil {
+			log.Error().Err(err).Msgf("HandleRepoStream error")
+			conn.Close()
+			if ctx.Err() != nil {
+				break
+			}
+		}
+		time.Sleep(5 * time.Second)
+		log.Debug().Msgf("Restarting HandleRepoStream")
+	}
+
+	return ctx.Err()
+}
