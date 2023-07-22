@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"strings"
+	"net/url"
 	"sync"
 	"time"
 
@@ -17,7 +17,7 @@ import (
 )
 
 type List struct {
-	did        string
+	url        url.URL
 	authclient *http.Client
 
 	CheckResultExpiration time.Duration
@@ -31,9 +31,9 @@ type List struct {
 	checkQueue chan string
 }
 
-func New(did string, authclient *http.Client) *List {
+func New(url *url.URL, authclient *http.Client) *List {
 	return &List{
-		did:                   did,
+		url:                   *url,
 		authclient:            authclient,
 		existingEntries:       map[string]bool{},
 		negativeCheckCache:    map[string]time.Time{},
@@ -46,7 +46,7 @@ func New(did string, authclient *http.Client) *List {
 func (l *List) Run(ctx context.Context) error {
 	log := zerolog.Ctx(ctx).With().
 		Str("module", "automute").
-		Str("list_did", l.did).
+		Str("list_did", l.url.String()).
 		Logger()
 	ctx = log.WithContext(ctx)
 	client := getXrpcClient(l.authclient)
@@ -54,7 +54,7 @@ func (l *List) Run(ctx context.Context) error {
 	for {
 		err := l.refreshList(ctx, client)
 		if err != nil {
-			log.Error().Err(err).Msgf("Failed to refresh the list %q", l.did)
+			log.Error().Err(err).Msgf("Failed to refresh the list %q", l.url.String())
 			time.Sleep(5 * time.Second)
 			continue
 		}
@@ -70,7 +70,7 @@ func (l *List) Run(ctx context.Context) error {
 		case <-refresh.C:
 			err := l.refreshList(ctx, client)
 			if err != nil {
-				log.Error().Err(err).Msgf("Failed to refresh the list %q", l.did)
+				log.Error().Err(err).Msgf("Failed to refresh the list %q", l.url.String())
 			}
 		case did := <-l.checkQueue:
 			skip := func(did string) bool {
@@ -101,18 +101,18 @@ func (l *List) Run(ctx context.Context) error {
 				if add {
 					resp, err := comatproto.RepoCreateRecord(ctx, client, &comatproto.RepoCreateRecord_Input{
 						Collection: "app.bsky.graph.listitem",
-						Repo:       strings.Split(l.did, "/")[2],
+						Repo:       l.url.Host,
 						Record: &lexutil.LexiconTypeDecoder{Val: &bsky.GraphListitem{
-							List:      l.did,
+							List:      l.url.String(),
 							Subject:   did,
 							CreatedAt: time.Now().UTC().Format(time.RFC3339),
 						}},
 					})
 					if err != nil {
-						log.Error().Err(err).Msgf("Failed to add %q to the list %s", did, l.did)
+						log.Error().Err(err).Msgf("Failed to add %q to the list %s", did, l.url.String())
 						return
 					}
-					log.Debug().Msgf("Added %q to the list %s, cid=%s", did, l.did, resp.Cid)
+					log.Debug().Msgf("Added %q to the list %s, cid=%s", did, l.url.String(), resp.Cid)
 				}
 
 				l.mu.Lock()
@@ -132,7 +132,7 @@ func (l *List) refreshList(ctx context.Context, client *xrpc.Client) error {
 	cursor := ""
 	entries := map[string]bool{}
 	for {
-		resp, err := bsky.GraphGetList(ctx, client, cursor, 100, l.did)
+		resp, err := bsky.GraphGetList(ctx, client, cursor, 100, l.url.String())
 		if err != nil {
 			return fmt.Errorf("app.bsky.graph.getList: %w", err)
 		}
