@@ -58,7 +58,19 @@ func (c *caching) GetDIDs(ctx context.Context) (StringSet, error) {
 	return c.entries.Clone(), nil
 }
 
-func Cached(ctx context.Context, refresh time.Duration, source DIDSet) DIDSet {
+func (c *caching) Contains(ctx context.Context, did string) (bool, error) {
+	c.mu.Lock()
+	haveData := c.haveData
+	r := c.entries[did]
+	c.mu.Unlock()
+
+	if !haveData {
+		return false, fmt.Errorf("cache not populated yet")
+	}
+	return r, nil
+}
+
+func Cached(ctx context.Context, refresh time.Duration, source DIDSet) QueryableDIDSet {
 	r := &caching{entries: StringSet{}, source: source}
 	go r.run(ctx, refresh)
 	return r

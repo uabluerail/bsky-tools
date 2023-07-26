@@ -15,3 +15,8 @@ func (set StringSet) Clone() StringSet {
 	}
 	return r
 }
+
+type QueryableDIDSet interface {
+	DIDSet
+	Contains(ctx context.Context, did string) (bool, error)
+}
