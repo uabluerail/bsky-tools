@@ -142,6 +142,9 @@ func (l *List) refreshList(ctx context.Context, client *xrpc.Client) error {
 		}
 
 		for _, item := range resp.Items {
+			if item == nil || item.Subject == nil {
+				continue
+			}
 			entries[item.Subject.Did] = true
 		}
 
