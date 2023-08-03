@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -21,6 +22,8 @@ import (
 
 type Firehose struct {
 	Hooks []Hook
+
+	seq int64
 }
 
 type Predicate func(ctx context.Context, commit *comatproto.SyncSubscribeRepos_Commit, op *comatproto.SyncSubscribeRepos_RepoOp, record cbg.CBORMarshaler) bool
@@ -40,7 +43,11 @@ func (f *Firehose) Run(ctx context.Context) error {
 	ctx = log.WithContext(ctx)
 
 	for {
-		conn, _, err := websocket.DefaultDialer.Dial("wss://bsky.social/xrpc/com.atproto.sync.subscribeRepos", http.Header{})
+		addr, _ := url.Parse("wss://bsky.social/xrpc/com.atproto.sync.subscribeRepos")
+		if f.seq > 0 {
+			addr.Query().Add("cursor", fmt.Sprint(f.seq))
+		}
+		conn, _, err := websocket.DefaultDialer.Dial(addr.String(), http.Header{})
 		if err != nil {
 			log.Error().Err(err).Msgf("websocket dial error")
 			time.Sleep(5 * time.Second)
@@ -57,6 +64,7 @@ func (f *Firehose) Run(ctx context.Context) error {
 					Str("repo", e.Repo).
 					Str("commit", e.Commit.String()).
 					Logger()
+				f.seq = e.Seq
 				repo_, err := repo.ReadRepoFromCar(ctx, bytes.NewReader(e.Blocks))
 				if err != nil {
 					return fmt.Errorf("ReadRepoFromCar: %w", err)
