@@ -81,6 +81,12 @@ func IsBlock() Predicate {
 	}
 }
 
+func IsPost() Predicate {
+	return func(ctx context.Context, commit *comatproto.SyncSubscribeRepos_Commit, op *comatproto.SyncSubscribeRepos_RepoOp, record cbg.CBORMarshaler) bool {
+		return strings.HasPrefix(op.Path, "app.bsky.feed.post/")
+	}
+}
+
 func SenderInSet(set didset.QueryableDIDSet) Predicate {
 	return func(ctx context.Context, commit *comatproto.SyncSubscribeRepos_Commit, op *comatproto.SyncSubscribeRepos_RepoOp, record cbg.CBORMarshaler) bool {
 		r, err := set.Contains(ctx, commit.Repo)
