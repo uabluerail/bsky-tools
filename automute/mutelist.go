@@ -99,20 +99,12 @@ func (l *List) Run(ctx context.Context) error {
 				}
 
 				if add {
-					resp, err := comatproto.RepoCreateRecord(ctx, client, &comatproto.RepoCreateRecord_Input{
-						Collection: "app.bsky.graph.listitem",
-						Repo:       l.url.Host,
-						Record: &lexutil.LexiconTypeDecoder{Val: &bsky.GraphListitem{
-							List:      l.url.String(),
-							Subject:   did,
-							CreatedAt: time.Now().UTC().Format(time.RFC3339),
-						}},
-					})
+					err := l.addToList(ctx, client, did)
 					if err != nil {
 						log.Error().Err(err).Msgf("Failed to add %q to the list %s", did, l.url.String())
 						return
 					}
-					log.Debug().Msgf("Added %q to the list %s, cid=%s", did, l.url.String(), resp.Cid)
+					log.Debug().Msgf("Added %q to the list %s", did, l.url.String())
 				}
 
 				l.mu.Lock()
@@ -127,6 +119,33 @@ func (l *List) Run(ctx context.Context) error {
 	}
 	return ctx.Err()
 }
+
+func (l *List) addToList(ctx context.Context, client *xrpc.Client, did string) error {
+	_, err := comatproto.RepoCreateRecord(ctx, client, &comatproto.RepoCreateRecord_Input{
+		Collection: "app.bsky.graph.listitem",
+		Repo:       l.url.Host,
+		Record: &lexutil.LexiconTypeDecoder{Val: &bsky.GraphListitem{
+			List:      l.url.String(),
+			Subject:   did,
+			CreatedAt: time.Now().UTC().Format(time.RFC3339),
+		}},
+	})
+
+	return err
+}
+
+// func (l *List) delete(ctx context.Context, client *xrpc.Client) error {
+// 	resp, err := comatproto.RepoDeleteRecord(ctx, client, &comatproto.RepoDeleteRecord_Input{
+// 		Collection: "app.bsky.graph.list",
+// 		Repo:       l.url.Host,
+// 		Rkey:
+// 	})
+// 	if err != nil {
+// 		log.Error().Err(err).Msgf("Failed to remove list %s", l.url.String())
+// 		return
+// 	}
+// 	log.Debug().Msgf("Removed list %s, cid=%s", l.url.String(), resp.Cid)
+// }
 
 func (l *List) refreshList(ctx context.Context, client *xrpc.Client) error {
 	cursor := ""
