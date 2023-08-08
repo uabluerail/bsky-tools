@@ -77,3 +77,10 @@ func (s *FileBackedTokenSource) Token() (*oauth2.Token, error) {
 func NewHttpClient(ctx context.Context, authfile string) *http.Client {
 	return oauth2.NewClient(ctx, &FileBackedTokenSource{filename: authfile})
 }
+
+func NewClient(ctx context.Context, authfile string) *xrpc.Client {
+	return &xrpc.Client{
+		Client: NewHttpClient(ctx, authfile),
+		Host:   "https://bsky.social",
+	}
+}
