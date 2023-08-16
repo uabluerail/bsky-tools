@@ -58,6 +58,48 @@ func BlockedUsers(authclient *xrpc.Client) DIDSet {
 	return &blocked{client: authclient}
 }
 
+type blockedBy struct {
+	did    string
+	client *xrpc.Client
+}
+
+func (b *blockedBy) GetDIDs(ctx context.Context) (StringSet, error) {
+	log := zerolog.Ctx(ctx).With().
+		Str("module", "didset").
+		Str("didset", "blocked").
+		Logger()
+	ctx = log.WithContext(ctx)
+
+	r := StringSet{}
+
+	cursor := ""
+	for {
+		resp, err := comatproto.RepoListRecords(ctx, b.client, "app.bsky.graph.block", cursor, 100, b.did, false, "", "")
+		if err != nil {
+			return nil, fmt.Errorf("listing blocked users: %w", err)
+		}
+		if resp.Cursor == nil || *resp.Cursor == "" {
+			break
+		}
+		cursor = *resp.Cursor
+		for _, rec := range resp.Records {
+			item, ok := rec.Value.Val.(*bsky.GraphBlock)
+			if !ok {
+				continue
+			}
+
+			r[item.Subject] = true
+		}
+	}
+
+	log.Debug().Msgf("Got %d dids", len(r))
+	return r, nil
+}
+
+func BlockedBy(authclient *xrpc.Client, did string) DIDSet {
+	return &blockedBy{client: authclient, did: did}
+}
+
 type muteList struct {
 	client *xrpc.Client
 	url    string
