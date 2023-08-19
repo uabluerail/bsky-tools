@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/rs/zerolog"
+	"github.com/uabluerail/bsky-tools/pagination"
 
 	comatproto "github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/api/bsky"
@@ -184,4 +185,44 @@ func (f *followers) GetDIDs(ctx context.Context) (StringSet, error) {
 
 func FollowersOf(authclient *xrpc.Client, did string) DIDSet {
 	return &followers{client: authclient, did: did}
+}
+
+type follows struct {
+	client *xrpc.Client
+	did    string
+}
+
+func (f *follows) GetDIDs(ctx context.Context) (StringSet, error) {
+	log := zerolog.Ctx(ctx).With().
+		Str("module", "didset").
+		Str("didset", "follows").
+		Str("follows_of", f.did).
+		Logger()
+	ctx = log.WithContext(ctx)
+
+	return pagination.Reduce(
+		func(cursor string) (resp *bsky.GraphGetFollows_Output, nextCursor string, err error) {
+			resp, err = bsky.GraphGetFollows(ctx, f.client, f.did, cursor, 100)
+			if resp.Cursor != nil {
+				nextCursor = *resp.Cursor
+			}
+			return
+		},
+		func(resp *bsky.GraphGetFollows_Output, acc StringSet) (StringSet, error) {
+			if acc == nil {
+				acc = make(StringSet)
+			}
+			for _, i := range resp.Follows {
+				acc[i.Did] = true
+			}
+			return acc, nil
+		},
+	)
+}
+
+func FollowsOf(authclient *xrpc.Client, did string) DIDSet {
+	return &follows{
+		client: authclient,
+		did:    did,
+	}
 }
