@@ -15,6 +15,7 @@ import (
 
 	comatproto "github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/events"
+	"github.com/bluesky-social/indigo/events/schedulers/sequential"
 	lexutil "github.com/bluesky-social/indigo/lex/util"
 	"github.com/bluesky-social/indigo/repo"
 	cbg "github.com/whyrusleeping/cbor-gen"
@@ -23,7 +24,8 @@ import (
 type Firehose struct {
 	Hooks []Hook
 
-	seq int64
+	seq   int64
+	ident string
 }
 
 type Predicate func(ctx context.Context, commit *comatproto.SyncSubscribeRepos_Commit, op *comatproto.SyncSubscribeRepos_RepoOp, record cbg.CBORMarshaler) bool
@@ -34,7 +36,7 @@ type Hook struct {
 }
 
 func New() *Firehose {
-	return &Firehose{}
+	return &Firehose{ident: "bsky-tools/firehose"}
 }
 
 func (f *Firehose) Run(ctx context.Context) error {
@@ -103,7 +105,7 @@ func (f *Firehose) Run(ctx context.Context) error {
 			},
 		}
 
-		if err := events.HandleRepoStream(ctx, conn, &events.SequentialScheduler{Do: callbacks.EventHandler}); err != nil {
+		if err := events.HandleRepoStream(ctx, conn, sequential.NewScheduler(f.ident, callbacks.EventHandler)); err != nil {
 			log.Error().Err(err).Msgf("HandleRepoStream error")
 			conn.Close()
 			if ctx.Err() != nil {
