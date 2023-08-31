@@ -45,7 +45,9 @@ func (f *Firehose) Run(ctx context.Context) error {
 	for {
 		addr, _ := url.Parse("wss://bsky.social/xrpc/com.atproto.sync.subscribeRepos")
 		if f.seq > 0 {
-			addr.Query().Add("cursor", fmt.Sprint(f.seq))
+			q := addr.Query()
+			q.Add("cursor", fmt.Sprint(f.seq))
+			addr.RawQuery = q.Encode()
 		}
 		conn, _, err := websocket.DefaultDialer.Dial(addr.String(), http.Header{})
 		if err != nil {
