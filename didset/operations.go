@@ -70,3 +70,45 @@ func (d *difference) GetDIDs(ctx context.Context) (StringSet, error) {
 func Difference(left DIDSet, right DIDSet) DIDSet {
 	return &difference{left: left, right: right}
 }
+
+type intersection struct {
+	sets []DIDSet
+}
+
+func (i *intersection) GetDIDs(ctx context.Context) (StringSet, error) {
+	log := zerolog.Ctx(ctx).With().
+		Str("module", "didset").
+		Str("didset", "intersection").
+		Logger()
+	ctx = log.WithContext(ctx)
+
+	if len(i.sets) == 0 {
+		return StringSet{}, nil
+	}
+
+	sets := []StringSet{}
+
+	for i, s := range i.sets {
+		entries, err := s.GetDIDs(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("evaluating %d'th set of intersection: %w", i, err)
+		}
+		sets = append(sets, entries)
+	}
+
+	r := sets[0].Clone()
+	for did := range sets[0] {
+		for _, s := range sets {
+			if !s[did] {
+				delete(r, did)
+			}
+		}
+	}
+	log.Debug().Msgf("Got %d dids", len(r))
+
+	return r, nil
+}
+
+func Intersection(sets ...DIDSet) DIDSet {
+	return &intersection{sets: sets}
+}
