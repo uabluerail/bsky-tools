@@ -12,14 +12,17 @@ import (
 type caching struct {
 	source DIDSet
 
-	mu       sync.Mutex
-	entries  StringSet
-	haveData bool
+	mu             sync.Mutex
+	entries        StringSet
+	waitUntilReady chan struct{}
+	err            error
 }
 
 func (c *caching) run(ctx context.Context, refresh time.Duration) {
 	log := zerolog.Ctx(ctx).With().Str("module", "didset").Logger()
 	ctx = log.WithContext(ctx)
+
+	waitChanClosed := false
 
 	t := time.NewTicker(refresh)
 	tr := make(chan time.Time, 1)
@@ -30,48 +33,67 @@ func (c *caching) run(ctx context.Context, refresh time.Duration) {
 			set, err := c.source.GetDIDs(ctx)
 			if err != nil {
 				log.Warn().Err(err).Msgf("Failed to refresh cached list")
+				c.mu.Lock()
+				c.err = err
+				c.mu.Unlock()
 				break
 			}
 			c.mu.Lock()
 			c.entries = set
-			c.haveData = true
+			c.err = nil
 			c.mu.Unlock()
+			if !waitChanClosed {
+				close(c.waitUntilReady)
+				waitChanClosed = true
+			}
 		case v := <-t.C:
 			tr <- v
 		case <-ctx.Done():
 			c.mu.Lock()
 			defer c.mu.Unlock()
-			c.haveData = false
+			c.err = fmt.Errorf("context of the background goroutine is done: %w", ctx.Err())
 			return
 		}
 	}
 }
 
 func (c *caching) GetDIDs(ctx context.Context) (StringSet, error) {
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-c.waitUntilReady:
+	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if !c.haveData {
-		return nil, fmt.Errorf("cache not populated yet")
-	}
-
-	return c.entries.Clone(), nil
+	return c.entries.Clone(), c.err
 }
 
 func (c *caching) Contains(ctx context.Context, did string) (bool, error) {
+	select {
+	case <-ctx.Done():
+		return false, ctx.Err()
+	case <-c.waitUntilReady:
+	}
+
 	c.mu.Lock()
-	haveData := c.haveData
+	if c.err != nil {
+		defer c.mu.Unlock()
+		return false, c.err
+	}
 	r := c.entries[did]
 	c.mu.Unlock()
 
-	if !haveData {
-		return false, fmt.Errorf("cache not populated yet")
-	}
 	return r, nil
 }
 
 func Cached(ctx context.Context, refresh time.Duration, source DIDSet) QueryableDIDSet {
-	r := &caching{entries: StringSet{}, source: source}
+	r := &caching{
+		entries:        StringSet{},
+		source:         source,
+		waitUntilReady: make(chan struct{}),
+	}
 	go r.run(ctx, refresh)
 	return r
 }
