@@ -10,7 +10,7 @@ import (
 	"golang.org/x/oauth2"
 
 	comatproto "github.com/bluesky-social/indigo/api/atproto"
-	"github.com/bluesky-social/indigo/util/cliutil"
+	"github.com/bluesky-social/indigo/util"
 	"github.com/bluesky-social/indigo/xrpc"
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -30,7 +30,7 @@ func (s *FileBackedTokenSource) Token() (*oauth2.Token, error) {
 	}
 
 	client := &xrpc.Client{
-		Client: cliutil.NewHttpClient(),
+		Client: util.RobustHTTPClient(),
 		Host:   "https://bsky.social",
 		Auth: &xrpc.AuthInfo{
 			AccessJwt: tok.RefreshJwt,
@@ -75,6 +75,7 @@ func (s *FileBackedTokenSource) Token() (*oauth2.Token, error) {
 }
 
 func NewHttpClient(ctx context.Context, authfile string) *http.Client {
+	ctx = context.WithValue(ctx, oauth2.HTTPClient, util.RobustHTTPClient())
 	return oauth2.NewClient(ctx, &FileBackedTokenSource{filename: authfile})
 }
 
