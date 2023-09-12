@@ -88,7 +88,9 @@ func (f *Firehose) Run(ctx context.Context) error {
 
 						continue
 					}
-					if lexutil.LexLink(rcid) != *op.Cid {
+					if op.Cid == nil {
+						log.Warn().Msgf("op.Cid is missing")
+					} else if lexutil.LexLink(rcid) != *op.Cid {
 						log.Info().Err(fmt.Errorf("mismatch in record op and cid: %s != %s", rcid, *op.Cid))
 					}
 
