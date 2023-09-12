@@ -75,16 +75,23 @@ func From(did string) Predicate {
 	}
 }
 
-func IsBlock() Predicate {
+func IsInCollection(collection string) Predicate {
 	return func(ctx context.Context, commit *comatproto.SyncSubscribeRepos_Commit, op *comatproto.SyncSubscribeRepos_RepoOp, record cbg.CBORMarshaler) bool {
-		return strings.HasPrefix(op.Path, "app.bsky.graph.block/")
+		return strings.HasPrefix(op.Path, collection+"/")
 	}
+
+}
+
+func IsBlock() Predicate {
+	return IsInCollection("app.bsky.graph.block")
 }
 
 func IsPost() Predicate {
-	return func(ctx context.Context, commit *comatproto.SyncSubscribeRepos_Commit, op *comatproto.SyncSubscribeRepos_RepoOp, record cbg.CBORMarshaler) bool {
-		return strings.HasPrefix(op.Path, "app.bsky.feed.post/")
-	}
+	return IsInCollection("app.bsky.feed.post")
+}
+
+func IsFollow() Predicate {
+	return IsInCollection("app.bsky.graph.follow")
 }
 
 func SenderInSet(set didset.QueryableDIDSet) Predicate {
