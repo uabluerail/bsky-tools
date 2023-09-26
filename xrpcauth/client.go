@@ -85,3 +85,10 @@ func NewClient(ctx context.Context, authfile string) *xrpc.Client {
 		Host:   "https://bsky.social",
 	}
 }
+
+func NewAnonymousClient(ctx context.Context) *xrpc.Client {
+	return &xrpc.Client{
+		Client: util.RobustHTTPClient(),
+		Host:   "https://bsky.social",
+	}
+}
