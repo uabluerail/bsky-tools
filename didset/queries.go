@@ -203,6 +203,9 @@ func (f *follows) GetDIDs(ctx context.Context) (StringSet, error) {
 	return pagination.Reduce(
 		func(cursor string) (resp *bsky.GraphGetFollows_Output, nextCursor string, err error) {
 			resp, err = bsky.GraphGetFollows(ctx, f.client, f.did, cursor, 100)
+			if err != nil {
+				return
+			}
 			if resp.Cursor != nil {
 				nextCursor = *resp.Cursor
 			}
