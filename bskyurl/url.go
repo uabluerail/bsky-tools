@@ -8,6 +8,9 @@ import (
 )
 
 type Target interface{}
+type TargetWithProfile interface {
+	GetProfile() string
+}
 
 // DetermineTarget parses a string as a Bluesky-related URL. It recognizes the following inputs:
 //
@@ -66,7 +69,11 @@ type Profile struct {
 	Profile string
 }
 
+func (p *Profile) GetProfile() string { return p.Profile }
+
 type Post struct {
 	Profile string
 	Rkey    string
 }
+
+func (p *Post) GetProfile() string { return p.Profile }
