@@ -45,7 +45,7 @@ func (f *Firehose) Run(ctx context.Context) error {
 	ctx = log.WithContext(ctx)
 
 	for {
-		addr, _ := url.Parse("wss://bsky.social/xrpc/com.atproto.sync.subscribeRepos")
+		addr, _ := url.Parse("wss://bsky.network/xrpc/com.atproto.sync.subscribeRepos")
 		if f.seq > 0 {
 			q := addr.Query()
 			q.Add("cursor", fmt.Sprint(f.seq))
