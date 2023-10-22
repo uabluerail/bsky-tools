@@ -229,3 +229,51 @@ func FollowsOf(authclient *xrpc.Client, did string) DIDSet {
 		did:    did,
 	}
 }
+
+type followRecords struct {
+	client *xrpc.Client
+	did    string
+}
+
+func (f *followRecords) GetDIDs(ctx context.Context) (StringSet, error) {
+	log := zerolog.Ctx(ctx).With().
+		Str("module", "didset").
+		Str("didset", "follows").
+		Str("follow_records_of", f.did).
+		Logger()
+	ctx = log.WithContext(ctx)
+
+	return pagination.Reduce(
+		func(cursor string) (resp *comatproto.RepoListRecords_Output, nextCursor string, err error) {
+			resp, err = comatproto.RepoListRecords(ctx, f.client, "app.bsky.graph.follow", cursor, 100, f.did, false, "", "")
+			if err != nil {
+				return
+			}
+			if resp.Cursor != nil {
+				nextCursor = *resp.Cursor
+			}
+			return
+		},
+		func(resp *comatproto.RepoListRecords_Output, acc StringSet) (StringSet, error) {
+			if acc == nil {
+				acc = make(StringSet)
+			}
+			for _, rec := range resp.Records {
+				item, ok := rec.Value.Val.(*bsky.GraphFollow)
+				if !ok {
+					continue
+				}
+
+				acc[item.Subject] = true
+			}
+			return acc, nil
+		},
+	)
+}
+
+func FollowRecordsOf(authclient *xrpc.Client, did string) DIDSet {
+	return &followRecords{
+		client: authclient,
+		did:    did,
+	}
+}
