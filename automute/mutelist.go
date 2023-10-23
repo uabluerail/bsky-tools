@@ -95,6 +95,7 @@ func (l *List) Run(ctx context.Context) error {
 				add, err := l.Callback(ctx, l.client, did)
 				if err != nil {
 					log.Error().Err(err).Msgf("Failed to check if a user should be added to the list")
+					return
 				}
 
 				if add {
