@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"sync"
+	"time"
 
 	"golang.org/x/oauth2"
 
@@ -77,14 +79,92 @@ func NewHttpClient(ctx context.Context, authfile string) *http.Client {
 }
 
 func NewClient(ctx context.Context, authfile string) *xrpc.Client {
-	return &xrpc.Client{
-		Client: NewHttpClient(ctx, authfile),
-		Host:   "https://bsky.social",
-	}
+	return NewClientWithTokenSource(ctx, &FileBackedTokenSource{filename: authfile})
 }
 
 func NewAnonymousClient(ctx context.Context) *xrpc.Client {
 	return &xrpc.Client{
 		Host: "https://bsky.social",
 	}
+}
+
+func NewClientWithTokenSource(ctx context.Context, source oauth2.TokenSource) *xrpc.Client {
+	return &xrpc.Client{
+		Client: oauth2.NewClient(ctx, source),
+		Host:   "https://bsky.social",
+	}
+}
+
+type passwordAuthTokenSource struct {
+	sync.Mutex
+
+	Login    string
+	Password string
+
+	Session   comatproto.ServerRefreshSession_Output
+	Timestamp time.Time
+}
+
+func PasswordAuth(login string, password string) oauth2.TokenSource {
+	return &passwordAuthTokenSource{
+		Login:    login,
+		Password: password,
+	}
+}
+
+func (s *passwordAuthTokenSource) Token() (*oauth2.Token, error) {
+	s.Lock()
+	defer s.Unlock()
+	ctx := context.Background()
+
+	switch {
+	case s.Timestamp.IsZero():
+		// First request, we don't have any token yet.
+		client := NewAnonymousClient(ctx)
+		resp, err := comatproto.ServerCreateSession(ctx, client, &comatproto.ServerCreateSession_Input{
+			Identifier: s.Login,
+			Password:   s.Password,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to create a session: %w", err)
+		}
+		s.Session.AccessJwt = resp.AccessJwt
+		s.Session.RefreshJwt = resp.RefreshJwt
+		s.Session.Did = resp.Did
+		s.Session.Handle = resp.Handle
+		s.Timestamp = time.Now()
+	case s.Timestamp.Add(time.Minute).Before(time.Now()):
+		// We have a token, but it might be stale; get a new one.
+		client := NewAnonymousClient(ctx)
+		client.Auth = &xrpc.AuthInfo{
+			AccessJwt: s.Session.RefreshJwt,
+			Handle:    s.Session.Handle,
+			Did:       s.Session.Did,
+		}
+		resp, err := comatproto.ServerRefreshSession(ctx, client)
+		if err != nil {
+			return nil, fmt.Errorf("failed to refresh the token: %w", err)
+		}
+		s.Session = *resp
+		s.Timestamp = time.Now()
+	}
+
+	// At this point s.Session should contain a valid token.
+	t, _, err := jwt.NewParser().ParseUnverified(s.Session.AccessJwt, make(jwt.MapClaims))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse access token: %w", err)
+	}
+	expiry, err := t.Claims.GetExpirationTime()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get expiration time from the access token: %w", err)
+	}
+
+	r := &oauth2.Token{
+		TokenType:    "bearer",
+		AccessToken:  s.Session.AccessJwt,
+		RefreshToken: s.Session.RefreshJwt,
+		Expiry:       expiry.Time,
+	}
+
+	return r, nil
 }
