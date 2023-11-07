@@ -3,8 +3,7 @@ module github.com/uabluerail/bsky-tools
 go 1.20
 
 require (
-	github.com/bluesky-social/indigo v0.0.0-20231018194245-d4dfa2e3d870
-	github.com/golang-jwt/jwt/v5 v5.0.0
+	github.com/bluesky-social/indigo v0.0.0-20231103003940-7be9693179e3
 	github.com/gorilla/websocket v1.5.0
 	github.com/ipfs/go-cid v0.4.1
 	github.com/rs/zerolog v1.29.1
@@ -15,6 +14,7 @@ require (
 
 require (
 	github.com/beorn7/perks v1.0.1 // indirect
+	github.com/carlmjohnson/versioninfo v0.22.5 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.2 // indirect
 	github.com/go-logr/logr v1.2.4 // indirect

@@ -2,10 +2,12 @@ package xrpcauth
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -13,8 +15,24 @@ import (
 
 	comatproto "github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/xrpc"
-	"github.com/golang-jwt/jwt/v5"
 )
+
+func jwtExpirationTime(token string) (time.Time, error) {
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		return time.Time{}, fmt.Errorf("expected 3 parts, got %d", len(parts))
+	}
+	var data struct {
+		Expiry float64 `json:"exp"`
+	}
+	if err := json.NewDecoder(base64.NewDecoder(base64.RawURLEncoding, strings.NewReader(parts[1]))).Decode(&data); err != nil {
+		return time.Time{}, fmt.Errorf("failed to decode claim: %w", err)
+	}
+	if data.Expiry == 0 {
+		return time.Time{}, fmt.Errorf("\"exp\" field missing from the claim")
+	}
+	return time.Unix(int64(data.Expiry), 0), nil
+}
 
 type FileBackedTokenSource struct {
 	filename string
@@ -55,11 +73,7 @@ func (s *FileBackedTokenSource) Token() (*oauth2.Token, error) {
 		return nil, fmt.Errorf("failed to replace the token file: %w", err)
 	}
 
-	t, _, err := jwt.NewParser().ParseUnverified(refresh.AccessJwt, make(jwt.MapClaims))
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse access token: %w", err)
-	}
-	expiry, err := t.Claims.GetExpirationTime()
+	expiry, err := jwtExpirationTime(refresh.AccessJwt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get expiration time from the access token: %w", err)
 	}
@@ -68,7 +82,7 @@ func (s *FileBackedTokenSource) Token() (*oauth2.Token, error) {
 		TokenType:    "bearer",
 		AccessToken:  refresh.AccessJwt,
 		RefreshToken: refresh.RefreshJwt,
-		Expiry:       expiry.Time,
+		Expiry:       expiry,
 	}
 
 	return r, nil
@@ -149,12 +163,7 @@ func (s *passwordAuthTokenSource) Token() (*oauth2.Token, error) {
 		s.Timestamp = time.Now()
 	}
 
-	// At this point s.Session should contain a valid token.
-	t, _, err := jwt.NewParser().ParseUnverified(s.Session.AccessJwt, make(jwt.MapClaims))
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse access token: %w", err)
-	}
-	expiry, err := t.Claims.GetExpirationTime()
+	expiry, err := jwtExpirationTime(s.Session.AccessJwt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get expiration time from the access token: %w", err)
 	}
@@ -163,7 +172,7 @@ func (s *passwordAuthTokenSource) Token() (*oauth2.Token, error) {
 		TokenType:    "bearer",
 		AccessToken:  s.Session.AccessJwt,
 		RefreshToken: s.Session.RefreshJwt,
-		Expiry:       expiry.Time,
+		Expiry:       expiry,
 	}
 
 	return r, nil
