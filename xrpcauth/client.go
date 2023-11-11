@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -110,32 +109,7 @@ func NewClientWithTokenSource(ctx context.Context, source oauth2.TokenSource) *x
 	}
 	tr, ok := r.Client.Transport.(*oauth2.Transport)
 	if ok {
-		base, ok := tr.Base.(*http.Transport)
-		if !ok {
-			base = http.DefaultTransport.(*http.Transport).Clone()
-		}
-		oldProxy := base.Proxy
-		base.Proxy = func(req *http.Request) (*url.URL, error) {
-			host := "bsky.social"
-			if u, err := url.Parse(r.Host); err == nil {
-				host = u.Host
-			}
-			// Hack for supporting redirects during a transition to split-PDS deployment
-			// (https://github.com/bluesky-social/atproto/discussions/1832)
-			// golang.org/x/oauth2 lib blindly adds `Authorization` header on redirects,
-			// which is inconsistent with http.Client behaviour and can potentially leak the token.
-			// But more immediate issue is that it can make some requests fail due to the redirected
-			// endpoint not being able to validate the token, even if it normally doesn't
-			// require any auth.
-			if req.Host != host {
-				req.Header.Del("Authorization")
-			}
-			if oldProxy != nil {
-				return oldProxy(req)
-			}
-			return nil, nil
-		}
-		tr.Base = base
+		tr.Base = stripAuthHeaderOnRedirect(r)
 	}
 	return r
 }
