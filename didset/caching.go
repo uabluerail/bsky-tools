@@ -2,11 +2,14 @@ package didset
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
 
 	"github.com/rs/zerolog"
+
+	"github.com/bluesky-social/indigo/xrpc"
 )
 
 type caching struct {
@@ -36,6 +39,18 @@ func (c *caching) run(ctx context.Context, refresh time.Duration) {
 				c.mu.Lock()
 				c.err = err
 				c.mu.Unlock()
+
+				var xrpcErr *xrpc.Error
+				if errors.As(err, &xrpcErr) {
+					// If we're throttled - wake up and retry after ratelimit reset.
+					if xrpcErr.IsThrottled() {
+						d := time.Until(xrpcErr.Ratelimit.Reset)
+						go func() {
+							time.Sleep(d)
+							tr <- time.Now()
+						}()
+					}
+				}
 				break
 			}
 			c.mu.Lock()
