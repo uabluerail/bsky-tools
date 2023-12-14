@@ -1,9 +1,9 @@
 module github.com/uabluerail/bsky-tools
 
-go 1.20
+go 1.21
 
 require (
-	github.com/bluesky-social/indigo v0.0.0-20231116204344-236c6150be87
+	github.com/bluesky-social/indigo v0.0.0-20231124230700-5bdc9f1949c9
 	github.com/gorilla/websocket v1.5.0
 	github.com/ipfs/go-cid v0.4.1
 	github.com/rs/zerolog v1.29.1
