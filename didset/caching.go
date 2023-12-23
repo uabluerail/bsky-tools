@@ -43,7 +43,7 @@ func (c *caching) run(ctx context.Context, refresh time.Duration) {
 				var xrpcErr *xrpc.Error
 				if errors.As(err, &xrpcErr) {
 					// If we're throttled - wake up and retry after ratelimit reset.
-					if xrpcErr.IsThrottled() {
+					if xrpcErr.IsThrottled() && xrpcErr.Ratelimit != nil {
 						d := time.Until(xrpcErr.Ratelimit.Reset)
 						go func() {
 							time.Sleep(d)
