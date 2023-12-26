@@ -18,27 +18,23 @@ func (set StringSet) Clone() StringSet {
 	return r
 }
 
+func (set StringSet) GetDIDs(ctx context.Context) (StringSet, error) {
+	return set.Clone(), nil
+}
+
+func (set StringSet) Contains(ctx context.Context, did string) (bool, error) {
+	return set[did], nil
+}
+
 type QueryableDIDSet interface {
 	DIDSet
 	Contains(ctx context.Context, did string) (bool, error)
 }
 
-type constSet struct {
-	entries StringSet
-}
-
 func Const(dids ...string) QueryableDIDSet {
-	r := &constSet{entries: StringSet{}}
+	r := StringSet{}
 	for _, did := range dids {
-		r.entries[did] = true
+		r[did] = true
 	}
 	return r
-}
-
-func (c *constSet) GetDIDs(ctx context.Context) (StringSet, error) {
-	return c.entries.Clone(), nil
-}
-
-func (c *constSet) Contains(ctx context.Context, did string) (bool, error) {
-	return c.entries[did], nil
 }
