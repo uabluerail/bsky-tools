@@ -29,7 +29,7 @@ func (u *union) GetDIDs(ctx context.Context) (StringSet, error) {
 			r[did] = true
 		}
 	}
-	log.Debug().Msgf("Got %d dids", len(r))
+	log.Trace().Msgf("Got %d dids", len(r))
 
 	return r, nil
 }
@@ -62,7 +62,7 @@ func (d *difference) GetDIDs(ctx context.Context) (StringSet, error) {
 	for did := range right {
 		delete(left, did)
 	}
-	log.Debug().Msgf("Got %d dids", len(left))
+	log.Trace().Msgf("Got %d dids", len(left))
 
 	return left, nil
 }
@@ -104,7 +104,7 @@ func (i *intersection) GetDIDs(ctx context.Context) (StringSet, error) {
 			}
 		}
 	}
-	log.Debug().Msgf("Got %d dids", len(r))
+	log.Trace().Msgf("Got %d dids", len(r))
 
 	return r, nil
 }

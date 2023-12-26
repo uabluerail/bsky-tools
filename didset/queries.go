@@ -51,7 +51,7 @@ func (b *blocked) GetDIDs(ctx context.Context) (StringSet, error) {
 		}
 	}
 
-	log.Debug().Msgf("Got %d dids", len(r))
+	log.Trace().Msgf("Got %d dids", len(r))
 	return r, nil
 }
 
@@ -93,7 +93,7 @@ func (b *blockedBy) GetDIDs(ctx context.Context) (StringSet, error) {
 		}
 	}
 
-	log.Debug().Msgf("Got %d dids", len(r))
+	log.Trace().Msgf("Got %d dids", len(r))
 	return r, nil
 }
 
@@ -135,7 +135,7 @@ func (l *muteList) GetDIDs(ctx context.Context) (StringSet, error) {
 		}
 		cursor = *resp.Cursor
 	}
-	log.Debug().Msgf("Got %d dids", len(r))
+	log.Trace().Msgf("Got %d dids", len(r))
 
 	return r, nil
 }
@@ -178,7 +178,7 @@ func (f *followers) GetDIDs(ctx context.Context) (StringSet, error) {
 		}
 		cursor = *resp.Cursor
 	}
-	log.Debug().Msgf("Got %d dids", len(r))
+	log.Trace().Msgf("Got %d dids", len(r))
 
 	return r, nil
 }
