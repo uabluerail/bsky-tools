@@ -43,7 +43,11 @@ func (t *stripAuthTransport) RoundTrip(req *http.Request) (*http.Response, error
 	// But more immediate issue is that it can make some requests fail due to the redirected
 	// endpoint not being able to validate the token, even if it normally doesn't
 	// require any auth.
-	if req2.Host != host {
+	reqHost := req2.Host
+	if reqHost == "" {
+		reqHost = req2.URL.Host
+	}
+	if reqHost != host {
 		req2.Header.Del("Authorization")
 	}
 
