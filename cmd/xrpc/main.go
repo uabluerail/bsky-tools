@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -39,6 +40,25 @@ func main() {
 						Value: true},
 				},
 			},
+			{
+				Name:    "procedure",
+				Aliases: []string{"post", "do"},
+				Action:  runPost,
+				Flags: []cli.Flag{
+					&cli.PathFlag{
+						Name:  "input-file",
+						Usage: "read input from file instead of stdin",
+					},
+					&cli.BoolFlag{
+						Name:  "no-input",
+						Usage: "set to true to send empty request body",
+					},
+					&cli.StringFlag{
+						Name:  "json",
+						Usage: "raw json to send in the request body",
+					},
+				},
+			},
 		},
 	}
 	if err := app.Run(os.Args); err != nil {
@@ -48,10 +68,20 @@ func main() {
 
 func createClient(cCtx *cli.Context) *xrpc.Client {
 	f := cCtx.Path("auth-file")
+	var r *xrpc.Client
 	if f == "" {
-		return xrpcauth.NewAnonymousClient(context.Background())
+		r = xrpcauth.NewAnonymousClient(context.Background())
+	} else {
+		r = xrpcauth.NewClient(context.Background(), f)
 	}
-	return xrpcauth.NewClient(context.Background(), f)
+	host := cCtx.String("host")
+
+	if !strings.HasPrefix(host, "http://") && !strings.HasPrefix(host, "https://") {
+		host = "https://" + host
+	}
+	r.Host = host
+
+	return r
 }
 
 func runGet(cCtx *cli.Context) error {
@@ -99,5 +129,47 @@ func runGet(cCtx *cli.Context) error {
 
 		return nil, cursor, nil
 	})
+	return err
+}
+
+func runPost(cCtx *cli.Context) error {
+	method := cCtx.Args().First()
+
+	params := map[string]interface{}{}
+
+	for _, arg := range cCtx.Args().Tail() {
+		parts := strings.SplitN(arg, "=", 2)
+		if len(parts) != 2 {
+			return fmt.Errorf("argument must be a =-separated key-value pair")
+		}
+		params[parts[0]] = parts[1]
+	}
+
+	client := createClient(cCtx)
+
+	var body interface{}
+	if !cCtx.Bool("no-input") {
+		switch {
+		case cCtx.String("json") != "":
+			body = strings.NewReader(cCtx.String("json"))
+		case cCtx.Path("input-file") != "":
+			f, err := os.Open(cCtx.Path("input-file"))
+			if err != nil {
+				return fmt.Errorf("opening %q: %w", cCtx.Path("input-file"), err)
+			}
+			defer f.Close()
+			body = f
+		default:
+			body = os.Stdin
+		}
+	}
+
+	resp := bytes.NewBuffer(nil)
+	err := client.Do(context.Background(), xrpc.Procedure, "application/json", method, params, body, &resp)
+	if err != nil {
+		return err
+	}
+
+	_, err = os.Stdout.Write(resp.Bytes())
 	return err
 }
