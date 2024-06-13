@@ -68,6 +68,12 @@ func (f *Firehose) Run(ctx context.Context) error {
 					Str("repo", e.Repo).
 					Str("commit", e.Commit.String()).
 					Logger()
+
+				defer func() {
+					if err := recover(); err != nil {
+						log.Error().Msgf("RepoCommit callback has panicked: %+v", err)
+					}
+				}()
 				f.seq = e.Seq
 				repo_, err := repo.ReadRepoFromCar(ctx, bytes.NewReader(e.Blocks))
 				if err != nil {
